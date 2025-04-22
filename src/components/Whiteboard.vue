@@ -146,6 +146,7 @@ const deletedDuringCurrentErasure = ref(false);
 
 // --- Texto ---
 const isEditingText = ref(false);
+const ignoreNextBlur = ref(false);
 const currentTextValue = ref('');
 const editingTextElementId = ref(null); // null para nuevo, ID para editar
 const textInputCoords = ref({ x: 0, y: 0 }); // Coordenadas *del canvas* donde poner el input
@@ -213,11 +214,6 @@ const pencilPreviewStyle = computed(() => {
     backgroundColor: currentColor.value,
     left: `${mousePos.value.x - size / 2}px`,
     top: `${mousePos.value.y - size / 2}px`,
-    borderRadius: '50%',
-    position: 'absolute',
-    pointerEvents: 'none', // No interferir con eventos del canvas
-    zIndex: 100, // Encima del canvas pero debajo del input de texto
-    opacity: 0.7,
   };
 });
 
@@ -825,6 +821,7 @@ function handleCanvasMouseDown(event) {
       if (hitTextElement) {
         startTextEditing(hitTextElement);
       } else {
+        console.log('Clic en texto nuevo');
         // Crear nuevo texto en la posición del clic
         startTextEditing(null, x, y);
       }
@@ -1061,7 +1058,6 @@ function handleCanvasMouseLeave(event) {
 
 function startTextEditing(element = null, defaultX = 0, defaultY = 0) {
   selectedElements.value.clear(); // Deseleccionar todo al editar/crear texto
-
   if (element) {
     // Editando existente
     editingTextElementId.value = element.id;
@@ -1084,12 +1080,33 @@ function startTextEditing(element = null, defaultX = 0, defaultY = 0) {
   nextTick(() => {
     textInputRef.value?.focus();
     autosizeTextarea(); // Ajustar tamaño inicial
+
+    // *** INICIO: Ignorar el blur inmediato ***
+    ignoreNextBlur.value = true;
+    // Usamos setTimeout con 0 para resetear la bandera DESPUÉS
+    // de que el ciclo de eventos actual (que causa el blur) termine.
+    setTimeout(() => {
+        ignoreNextBlur.value = false;
+        // console.log("IgnoreNextBlur flag reset"); // Para depuración
+    }, 0);
+    // *** FIN: Ignorar el blur inmediato ***
   });
   redrawCanvas(); // Quitar selección si la había
 }
 
 // Confirmar texto (onBlur o Enter sin Shift)
 function handleTextInputConfirm() {
+    // *** INICIO: Comprobar la bandera ***
+    if (ignoreNextBlur.value) {
+        // console.log("Ignoring immediate blur"); // Para depuración
+        // No reseteamos la bandera aquí, el setTimeout ya lo hizo o lo hará.
+        // Simplemente evitamos la confirmación esta vez.
+        // Podríamos forzar el foco de nuevo si se pierde, pero usualmente no es necesario
+        // textInputRef.value?.focus();
+        return;
+    }
+     // *** FIN: Comprobar la bandera ***
+
   if (!isEditingText.value) return;
 
   const text = currentTextValue.value.trim();
@@ -1520,7 +1537,7 @@ watch(currentSize, (newSizeStr) => {
   cursor: not-allowed;
 }
 .toolbar button.active {
-  background-color: #dodgerblue;
+  background-color: #1e90ff;
   color: white;
   border-color: #007bff;
 }
@@ -1579,9 +1596,7 @@ canvas {
   position: absolute;
   pointer-events: none;
   z-index: 100;
-  opacity: 0.7;
   border: 1px solid rgba(255, 255, 255, 0.5); /* Borde blanco semitransparente */
-  mix-blend-mode: difference; /* Intenta hacer el cursor visible sobre cualquier color */
 }
 
 .text-input {
@@ -1594,7 +1609,7 @@ canvas {
   overflow: hidden;
   resize: none;
   white-space: pre-wrap; /* Importante para multilínea */
-  z-index: 101;
+  z-index: 102;
   font-family: sans-serif; /* Asegurar fuente consistente */
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   line-height: 1.2; /* Ajuste básico */
